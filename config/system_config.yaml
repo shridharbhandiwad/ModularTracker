@@ -1,0 +1,161 @@
+# Radar Tracking System Configuration
+
+system:
+  tracking_mode: "TWS"  # "TWS" or "BEAM_REQUEST"
+  max_tracks: 1000
+  update_rate_hz: 50
+  max_detection_range_m: 100000
+  min_detection_range_m: 1000
+  
+threads:
+  num_worker_threads: 8
+  ingestion_thread_priority: 95
+  processing_thread_priority: 90
+  output_thread_priority: 85
+  
+communication:
+  primary:
+    adapter_type: "UDP"
+    host: "0.0.0.0"
+    port: 8080
+    buffer_size: 65536
+    timeout_ms: 100
+  backup:
+    adapter_type: "TCP"
+    host: "0.0.0.0" 
+    port: 8081
+    buffer_size: 65536
+    timeout_ms: 1000
+    
+data_processing:
+  sp_data_format: "ASTERIX_CAT240"  # or "CUSTOM_BINARY", "JSON"
+  coordinate_system: "CARTESIAN"     # or "POLAR", "GEODETIC"
+  earth_model: "WGS84"
+  
+algorithms:
+  clustering:
+    type: "DBSCAN"
+    config_file: "config/algorithms/dbscan_config.yaml"
+    fallback_type: "KMEANS"
+    fallback_config_file: "config/algorithms/kmeans_config.yaml"
+    
+  association:
+    type: "GNN"  # "GNN", "JPDA", "NN"
+    config_file: "config/algorithms/gnn_config.yaml"
+    gate_threshold: 9.21  # Chi-squared with 3 DOF at 99% confidence
+    max_associations_per_track: 3
+    
+  tracking:
+    type: "IMM"  # "IMM", "KALMAN_CV", "KALMAN_CA", "CTR", "PARTICLE"
+    config_file: "config/algorithms/imm_config.yaml"
+    process_noise_variance: 100.0
+    measurement_noise_variance: 25.0
+    
+track_management:
+  confirmation:
+    threshold: 3           # M out of N logic
+    window_size: 5
+    probability_threshold: 0.9
+    
+  deletion:
+    threshold: 5           # Consecutive missed detections
+    coast_time_limit_sec: 10.0
+    probability_threshold: 0.1
+    
+  quality:
+    min_confidence: 0.3
+    max_velocity_mps: 1000.0
+    max_acceleration_mps2: 50.0
+    position_tolerance_m: 500.0
+    
+output:
+  hmi:
+    enabled: true
+    adapter_type: "TCP"
+    host: "127.0.0.1"
+    port: 9090
+    update_rate_hz: 10
+    track_history_length: 100
+    
+  fusion:
+    enabled: true
+    adapter_type: "UDP"
+    host: "127.0.0.1"
+    port: 9091
+    update_rate_hz: 50
+    coordinate_transform: true
+    
+  file_output:
+    enabled: false
+    file_path: "output/tracks.json"
+    format: "JSON"  # "JSON", "CSV", "BINARY"
+    
+logging:
+  system:
+    level: "INFO"  # TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL
+    file_path: "logs/radar_tracking.log"
+    max_file_size_mb: 100
+    max_files: 10
+    pattern: "[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v"
+    
+  data:
+    enabled: true
+    level: "DEBUG"
+    file_path: "logs/data/data_%Y%m%d_%H%M%S.log"
+    max_file_size_mb: 500
+    max_files: 20
+    log_raw_data: false      # Can generate very large logs
+    log_detections: true
+    log_clusters: true
+    log_associations: true
+    log_tracks: true
+    
+  performance:
+    enabled: true
+    file_path: "logs/performance/perf_%Y%m%d.log"
+    sample_rate: 1.0         # Log every nth processing cycle
+    log_latency: true
+    log_throughput: true
+    log_memory_usage: true
+    
+plugins:
+  clustering:
+    search_paths:
+      - "plugins/clustering"
+      - "/usr/local/lib/radar_tracking/clustering"
+    
+  association:
+    search_paths:
+      - "plugins/association"
+      - "/usr/local/lib/radar_tracking/association"
+      
+  tracking:
+    search_paths:
+      - "plugins/tracking"
+      - "/usr/local/lib/radar_tracking/tracking"
+      
+simulation:
+  enabled: false
+  scenario_file: "scenarios/multi_target.yaml"
+  noise_factor: 1.0
+  detection_probability: 0.95
+  false_alarm_rate: 1e-6
+
+monitoring:
+  health_check:
+    enabled: true
+    interval_sec: 5
+    memory_threshold_mb: 2048
+    cpu_threshold_percent: 80
+    queue_size_threshold: 1000
+    
+  metrics:
+    enabled: true
+    export_interval_sec: 10
+    prometheus_port: 9092
+    
+debugging:
+  enable_core_dumps: true
+  stack_trace_on_crash: true
+  memory_leak_detection: false  # Enable for debug builds only
+  profiling: false
