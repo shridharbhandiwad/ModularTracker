@@ -1,0 +1,71 @@
+# Interacting Multiple Model (IMM) Filter Configuration
+# ====================================================
+
+algorithm:
+  name: "IMM"
+  version: "1.0"
+
+models:
+  # Constant Velocity Model
+  - name: "CV"
+    type: "constant_velocity"
+    initial_probability: 0.6
+    process_noise:
+      position: 10.0  # m²/s³
+      velocity: 1.0   # m²/s³
+    measurement_noise:
+      position: 25.0  # m²
+      velocity: 4.0   # (m/s)²
+      
+  # Constant Acceleration Model  
+  - name: "CA"
+    type: "constant_acceleration"
+    initial_probability: 0.3
+    process_noise:
+      position: 5.0    # m²/s³
+      velocity: 2.0    # m²/s³
+      acceleration: 0.5 # m²/s⁵
+    measurement_noise:
+      position: 25.0  # m²
+      velocity: 4.0   # (m/s)²
+      
+  # Coordinated Turn Model
+  - name: "CT"
+    type: "coordinated_turn"
+    initial_probability: 0.1
+    process_noise:
+      position: 8.0      # m²/s³
+      velocity: 1.5      # m²/s³
+      turn_rate: 0.001   # (rad/s)²
+    measurement_noise:
+      position: 25.0  # m²
+      velocity: 4.0   # (m/s)²
+
+# Model transition probabilities (Markov chain)
+transition_matrix:
+  # From CV to: [CV, CA, CT]
+  CV: [0.95, 0.04, 0.01]
+  # From CA to: [CV, CA, CT]  
+  CA: [0.05, 0.90, 0.05]
+  # From CT to: [CV, CA, CT]
+  CT: [0.02, 0.08, 0.90]
+
+parameters:
+  # IMM-specific parameters
+  mixing_threshold: 1e-6
+  max_models: 3
+  
+  # State initialization
+  initial_covariance:
+    position: 10000.0   # m²
+    velocity: 100.0     # (m/s)²
+    acceleration: 10.0  # (m/s²)²
+    
+  # Track quality parameters
+  quality:
+    min_probability_for_confirmation: 0.8
+    min_probability_for_deletion: 0.1
+    
+performance:
+  max_processing_time_ms: 20
+  enable_parallel_models: true

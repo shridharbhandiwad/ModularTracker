@@ -24,6 +24,22 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         add_compile_options(-g -O0 -fsanitize=address -fsanitize=undefined)
         add_link_options(-fsanitize=address -fsanitize=undefined)
     endif()
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    # Windows/MSVC specific options
+    add_compile_options(/W4)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_compile_options(/O2 /Ob2 /DNDEBUG)
+    else()
+        add_compile_options(/Od /Zi /RTC1)
+    endif()
+    
+    # Enable Windows-specific features
+    add_definitions(-D_WIN32_WINNT=0x0A00)  # Windows 10
+    add_definitions(-DWIN32_LEAN_AND_MEAN)
+    add_definitions(-DNOMINMAX)
+    
+    # Runtime library
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
 
 # Options
@@ -151,6 +167,18 @@ target_link_libraries(radar_tracking_core
         Boost::program_options
         ${CMAKE_DL_LIBS}  # For dynamic loading
 )
+
+# Windows-specific libraries
+if(WIN32)
+    target_link_libraries(radar_tracking_core
+        PUBLIC
+            ws2_32      # Winsock
+            kernel32    # Windows kernel
+            user32     # Windows user interface
+            advapi32   # Windows advanced API (for services)
+            shell32    # Windows shell
+    )
+endif()
 
 if(OpenMP_CXX_FOUND)
     target_link_libraries(radar_tracking_core PUBLIC OpenMP::OpenMP_CXX)

@@ -1,0 +1,38 @@
+# DBSCAN Clustering Algorithm Configuration
+# ========================================
+
+algorithm:
+  name: "DBSCAN"
+  version: "1.0"
+
+parameters:
+  # Maximum distance between two points to be considered neighbors
+  epsilon: 50.0  # meters
+  
+  # Minimum number of points required to form a dense region (cluster)
+  min_points: 3
+  
+  # Maximum distance for clustering in different dimensions
+  max_distance:
+    position: 100.0  # meters
+    velocity: 50.0   # m/s
+    
+  # Distance metric weights
+  distance_weights:
+    position: 1.0
+    velocity: 0.1
+    range: 0.5
+    azimuth: 0.3
+    
+  # Clustering constraints
+  max_cluster_size: 20
+  min_cluster_density: 0.1
+  
+  # Performance parameters
+  enable_kdtree: true
+  parallel_processing: true
+  
+performance:
+  max_processing_time_ms: 50
+  enable_caching: true
+  cache_size: 1000

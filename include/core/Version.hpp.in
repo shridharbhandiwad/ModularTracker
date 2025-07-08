@@ -1,0 +1,25 @@
+#pragma once
+
+#define RADAR_TRACKING_VERSION "@PROJECT_VERSION@"
+#define RADAR_TRACKING_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define RADAR_TRACKING_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define RADAR_TRACKING_VERSION_PATCH @PROJECT_VERSION_PATCH@
+
+#define RADAR_TRACKING_BUILD_TYPE "@CMAKE_BUILD_TYPE@"
+#define RADAR_TRACKING_COMPILER "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@"
+
+namespace radar_tracking {
+
+const char* getVersion() {
+    return RADAR_TRACKING_VERSION;
+}
+
+const char* getBuildType() {
+    return RADAR_TRACKING_BUILD_TYPE;
+}
+
+const char* getCompiler() {
+    return RADAR_TRACKING_COMPILER;
+}
+
+}  // namespace radar_tracking
