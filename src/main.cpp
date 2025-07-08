@@ -2,12 +2,25 @@
 #include "utils/Logger.hpp"
 #include "utils/ConfigManager.hpp"
 #include "utils/PerformanceMonitor.hpp"
-#include <csignal>
 #include <iostream>
 #include <memory>
 #include <thread>
 #include <chrono>
 #include <boost/program_options.hpp>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <winsvc.h>
+    #include <tchar.h>
+    #include <strsafe.h>
+    #define SERVICE_NAME TEXT("RadarTrackingService")
+#else
+    #include <csignal>
+    #include <unistd.h>
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+#endif
 
 namespace po = boost::program_options;
 using namespace radar_tracking;
@@ -16,8 +29,134 @@ using namespace radar_tracking;
 std::unique_ptr<RadarSystem> g_radar_system = nullptr;
 std::atomic<bool> g_shutdown_requested{false};
 
+#ifdef _WIN32
+// Windows service variables
+SERVICE_STATUS g_service_status = {0};
+SERVICE_STATUS_HANDLE g_status_handle = NULL;
+HANDLE g_service_stop_event = INVALID_HANDLE_VALUE;
+
 /**
- * @brief Signal handler for graceful shutdown
+ * @brief Windows console control handler
+ */
+BOOL WINAPI consoleHandler(DWORD dwCtrlType) {
+    switch (dwCtrlType) {
+        case CTRL_C_EVENT:
+        case CTRL_BREAK_EVENT:
+        case CTRL_CLOSE_EVENT:
+        case CTRL_SHUTDOWN_EVENT:
+            LOG_INFO("Received Windows control signal, initiating graceful shutdown...");
+            g_shutdown_requested = true;
+            if (g_radar_system) {
+                g_radar_system->stop();
+            }
+            return TRUE;
+        default:
+            return FALSE;
+    }
+}
+
+/**
+ * @brief Windows service control handler
+ */
+VOID WINAPI serviceCtrlHandler(DWORD dwCtrl) {
+    switch (dwCtrl) {
+        case SERVICE_CONTROL_STOP:
+            LOG_INFO("Service stop requested");
+            g_service_status.dwWin32ExitCode = 0;
+            g_service_status.dwCurrentState = SERVICE_STOP_PENDING;
+            g_service_status.dwCheckPoint = 0;
+            
+            if (SetServiceStatus(g_status_handle, &g_service_status) == FALSE) {
+                LOG_ERROR("SetServiceStatus returned error");
+            }
+            
+            // Signal the service to stop
+            SetEvent(g_service_stop_event);
+            g_shutdown_requested = true;
+            if (g_radar_system) {
+                g_radar_system->stop();
+            }
+            break;
+            
+        default:
+            break;
+    }
+}
+
+/**
+ * @brief Windows service main function
+ */
+VOID WINAPI serviceMain(DWORD argc, LPTSTR* argv) {
+    DWORD Status = E_FAIL;
+    
+    // Register service control handler
+    g_status_handle = RegisterServiceCtrlHandler(SERVICE_NAME, serviceCtrlHandler);
+    
+    if (g_status_handle == NULL) {
+        LOG_ERROR("RegisterServiceCtrlHandler failed");
+        return;
+    }
+    
+    // Initialize service status
+    ZeroMemory(&g_service_status, sizeof(g_service_status));
+    g_service_status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    g_service_status.dwControlsAccepted = SERVICE_ACCEPT_STOP;
+    g_service_status.dwCurrentState = SERVICE_START_PENDING;
+    g_service_status.dwWin32ExitCode = 0;
+    g_service_status.dwCheckPoint = 0;
+    
+    // Create stop event
+    g_service_stop_event = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (g_service_stop_event == NULL) {
+        LOG_ERROR("CreateEvent failed");
+        g_service_status.dwCurrentState = SERVICE_STOPPED;
+        g_service_status.dwWin32ExitCode = GetLastError();
+        SetServiceStatus(g_status_handle, &g_service_status);
+        return;
+    }
+    
+    // Service is starting
+    g_service_status.dwCurrentState = SERVICE_RUNNING;
+    g_service_status.dwWin32ExitCode = 0;
+    g_service_status.dwCheckPoint = 0;
+    
+    if (SetServiceStatus(g_status_handle, &g_service_status) == FALSE) {
+        LOG_ERROR("SetServiceStatus failed");
+    }
+    
+    LOG_INFO("Windows service started successfully");
+    
+    // Main service work would be done here
+    // For now, just wait for stop event
+    WaitForSingleObject(g_service_stop_event, INFINITE);
+    
+    // Service is stopping
+    CloseHandle(g_service_stop_event);
+    
+    g_service_status.dwControlsAccepted = 0;
+    g_service_status.dwCurrentState = SERVICE_STOPPED;
+    g_service_status.dwWin32ExitCode = 0;
+    g_service_status.dwCheckPoint = 3;
+    
+    if (SetServiceStatus(g_status_handle, &g_service_status) == FALSE) {
+        LOG_ERROR("SetServiceStatus failed");
+    }
+    
+    LOG_INFO("Windows service stopped");
+}
+
+/**
+ * @brief Setup Windows signal handlers
+ */
+void setupSignalHandlers() {
+    if (!SetConsoleCtrlHandler(consoleHandler, TRUE)) {
+        LOG_WARN("Could not set console control handler");
+    }
+}
+
+#else
+/**
+ * @brief Unix signal handler for graceful shutdown
  */
 void signalHandler(int signal) {
     LOG_INFO("Received signal " + std::to_string(signal) + ", initiating graceful shutdown...");
@@ -29,7 +168,7 @@ void signalHandler(int signal) {
 }
 
 /**
- * @brief Setup signal handlers for graceful shutdown
+ * @brief Setup Unix signal handlers for graceful shutdown
  */
 void setupSignalHandlers() {
     std::signal(SIGINT, signalHandler);   // Ctrl+C
@@ -39,6 +178,7 @@ void setupSignalHandlers() {
     // Ignore SIGPIPE (broken pipe)
     std::signal(SIGPIPE, SIG_IGN);
 }
+#endif
 
 /**
  * @brief Print system information and status
@@ -93,7 +233,7 @@ bool validateConfigFile(const std::string& config_file) {
  * @brief Parse command line arguments
  */
 bool parseCommandLine(int argc, char* argv[], std::string& config_file, 
-                     std::string& log_level, bool& daemon_mode,
+                     std::string& log_level, bool& daemon_mode, bool& service_mode,
                      bool& validation_mode, std::string& scenario_file) {
     try {
         po::options_description desc("Radar Tracking System Options");
@@ -104,7 +244,11 @@ bool parseCommandLine(int argc, char* argv[], std::string& config_file,
             ("log-level,l", po::value<std::string>(&log_level)->default_value("INFO"),
              "Log level (TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL)")
             ("daemon,d", po::bool_switch(&daemon_mode)->default_value(false),
-             "Run in daemon mode")
+             "Run in daemon mode (Unix/Linux)")
+#ifdef _WIN32
+            ("service", po::bool_switch(&service_mode)->default_value(false),
+             "Run as Windows service")
+#endif
             ("validate,v", po::bool_switch(&validation_mode)->default_value(false),
              "Validate configuration and exit")
             ("scenario,s", po::value<std::string>(&scenario_file),
@@ -204,11 +348,33 @@ bool daemonize() {
     
     LOG_INFO("Process daemonized successfully");
     return true;
+#elif defined(_WIN32)
+    LOG_WARN("Daemon mode not supported on Windows - use --service instead");
+    return false;
 #else
     LOG_WARN("Daemon mode not supported on this platform");
     return false;
 #endif
 }
+
+#ifdef _WIN32
+/**
+ * @brief Run as Windows service
+ */
+bool runAsService() {
+    SERVICE_TABLE_ENTRY ServiceTable[] = {
+        {SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION)serviceMain},
+        {NULL, NULL}
+    };
+    
+    if (StartServiceCtrlDispatcher(ServiceTable) == FALSE) {
+        LOG_ERROR("StartServiceCtrlDispatcher failed: " + std::to_string(GetLastError()));
+        return false;
+    }
+    
+    return true;
+}
+#endif
 
 /**
  * @brief Monitor system health and performance
@@ -270,11 +436,12 @@ int main(int argc, char* argv[]) {
     std::string log_level;
     std::string scenario_file;
     bool daemon_mode = false;
+    bool service_mode = false;
     bool validation_mode = false;
     
     try {
         // Parse command line arguments
-        if (!parseCommandLine(argc, argv, config_file, log_level, daemon_mode, 
+        if (!parseCommandLine(argc, argv, config_file, log_level, daemon_mode, service_mode,
                              validation_mode, scenario_file)) {
             return 0; // Help or version was shown
         }
@@ -342,6 +509,17 @@ int main(int argc, char* argv[]) {
             }
         }
         
+        // Run as Windows service if requested
+#ifdef _WIN32
+        if (service_mode) {
+            LOG_INFO("Starting as Windows service...");
+            if (!runAsService()) {
+                return -1;
+            }
+            return 0; // Service dispatcher takes over
+        }
+#endif
+
         // Daemonize if requested
         if (daemon_mode) {
             if (!daemonize()) {
