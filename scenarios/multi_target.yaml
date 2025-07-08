@@ -1,0 +1,114 @@
+name: "Multi Target Scenario"
+description: "Complex scenario with multiple targets for testing association algorithms"
+duration_seconds: 600.0
+update_rate_hz: 10.0
+noise_level: 0.08
+clutter_density: 0.02
+false_alarm_rate: 0.002
+detection_probability: 0.9
+
+radar_parameters:
+  max_range_km: 150.0
+  azimuth_fov_deg: 360.0
+  elevation_fov_deg: 90.0
+  range_resolution_m: 15.0
+  azimuth_resolution_deg: 1.0
+  elevation_resolution_deg: 1.0
+  update_rate_hz: 10.0
+  noise_factor: 0.1
+
+targets:
+  # Fast moving aircraft
+  - initial_position:
+      x: -50000.0
+      y: -25000.0
+      z: 8000.0
+    velocity:
+      x: 250.0
+      y: 150.0
+      z: 10.0
+    acceleration:
+      x: 2.0
+      y: 1.0
+      z: 0.0
+    rcs: 10.0
+    active: true
+
+  # Slow moving helicopter
+  - initial_position:
+      x: 15000.0
+      y: 20000.0
+      z: 500.0
+    velocity:
+      x: 50.0
+      y: -30.0
+      z: 5.0
+    acceleration:
+      x: 0.5
+      y: -0.2
+      z: 0.0
+    rcs: 3.0
+    active: true
+
+  # High altitude target
+  - initial_position:
+      x: 30000.0
+      y: -40000.0
+      z: 12000.0
+    velocity:
+      x: -200.0
+      y: 100.0
+      z: -5.0
+    acceleration:
+      x: -1.0
+      y: 0.5
+      z: 0.0
+    rcs: 8.0
+    active: true
+
+  # Maneuvering target
+  - initial_position:
+      x: -20000.0
+      y: 35000.0
+      z: 3000.0
+    velocity:
+      x: 180.0
+      y: -120.0
+      z: 0.0
+    acceleration:
+      x: -5.0
+      y: 3.0
+      z: 0.0
+    rcs: 6.0
+    active: true
+
+  # Formation flight (2 aircraft)
+  - initial_position:
+      x: 60000.0
+      y: 0.0
+      z: 6000.0
+    velocity:
+      x: -300.0
+      y: 0.0
+      z: 0.0
+    acceleration:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    rcs: 12.0
+    active: true
+
+  - initial_position:
+      x: 60200.0
+      y: 200.0
+      z: 6000.0
+    velocity:
+      x: -300.0
+      y: 0.0
+      z: 0.0
+    acceleration:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    rcs: 12.0
+    active: true

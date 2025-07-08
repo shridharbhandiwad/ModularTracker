@@ -1,0 +1,43 @@
+# Global Nearest Neighbor Association Algorithm Configuration
+# =========================================================
+
+algorithm:
+  name: "GNN"
+  version: "1.0"
+
+parameters:
+  # Gating threshold for validation
+  gating_threshold: 9.21  # Chi-squared threshold for 99% confidence
+  
+  # Maximum association distance
+  max_association_distance: 500.0  # meters
+  
+  # Cost function weights
+  cost_weights:
+    position: 1.0
+    velocity: 0.5
+    innovation: 2.0
+    
+  # Association constraints
+  max_associations_per_track: 1
+  max_associations_per_cluster: 1
+  
+  # Gating parameters
+  gating:
+    enable_position_gate: true
+    enable_velocity_gate: true
+    enable_innovation_gate: true
+    
+    position_gate_size: 3.0  # sigma
+    velocity_gate_size: 2.0  # sigma
+    
+  # Assignment algorithm
+  assignment:
+    algorithm: "hungarian"  # hungarian, auction, greedy
+    max_iterations: 100
+    convergence_threshold: 1e-6
+    
+performance:
+  max_processing_time_ms: 30
+  enable_parallel: true
+  max_tracks_for_parallel: 50

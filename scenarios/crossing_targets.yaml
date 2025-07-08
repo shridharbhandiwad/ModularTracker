@@ -1,0 +1,51 @@
+name: "Crossing Targets Scenario"
+description: "Two targets crossing paths to test data association"
+duration_seconds: 300.0
+update_rate_hz: 15.0
+noise_level: 0.06
+clutter_density: 0.015
+false_alarm_rate: 0.0015
+detection_probability: 0.92
+
+radar_parameters:
+  max_range_km: 80.0
+  azimuth_fov_deg: 360.0
+  elevation_fov_deg: 60.0
+  range_resolution_m: 8.0
+  azimuth_resolution_deg: 0.5
+  elevation_resolution_deg: 0.5
+  update_rate_hz: 15.0
+  noise_factor: 0.08
+
+targets:
+  # Target 1: Moving east to west
+  - initial_position:
+      x: -40000.0
+      y: 0.0
+      z: 2000.0
+    velocity:
+      x: 220.0
+      y: 0.0
+      z: 0.0
+    acceleration:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    rcs: 7.0
+    active: true
+
+  # Target 2: Moving west to east (will cross path)
+  - initial_position:
+      x: 40000.0
+      y: 0.0
+      z: 2200.0
+    velocity:
+      x: -200.0
+      y: 0.0
+      z: 0.0
+    acceleration:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    rcs: 8.5
+    active: true
