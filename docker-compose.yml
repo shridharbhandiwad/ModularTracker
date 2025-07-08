@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # Development environment
+  radar-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: radar-tracking-dev
+    volumes:
+      # Mount source code for development
+      - .:/workspace
+      # Persist build artifacts
+      - radar-build:/workspace/build
+      # Persist logs
+      - radar-logs:/workspace/logs
+    ports:
+      - "8080:8080/udp"  # UDP communication
+      - "8081:8081/tcp"  # TCP communication
+    environment:
+      - CMAKE_BUILD_TYPE=Debug
+      - BUILD_TESTING=ON
+      - BUILD_SIMULATION=ON
+      - BUILD_BENCHMARKS=ON
+    working_dir: /workspace
+    command: /bin/bash
+    tty: true
+    stdin_open: true
+    networks:
+      - radar-network
+
+  # Production environment
+  radar-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: radar-tracking-prod
+    volumes:
+      # Persist logs and data
+      - radar-logs:/app/logs
+      - radar-data:/app/data
+      - ./config:/app/config:ro  # Read-only config
+      - ./scenarios:/app/scenarios:ro  # Read-only scenarios
+    ports:
+      - "8080:8080/udp"
+      - "8081:8081/tcp"
+    environment:
+      - CMAKE_BUILD_TYPE=Release
+    restart: unless-stopped
+    networks:
+      - radar-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "radar_tracking_system"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Radar simulator (for testing)
+  radar-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: radar-simulator
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+      - radar-logs:/app/logs
+    ports:
+      - "8082:8080/udp"  # Different port to avoid conflicts
+    command: ["./build/radar_simulator", "--config", "scenarios/multi_target.yaml"]
+    depends_on:
+      - radar-prod
+    networks:
+      - radar-network
+
+  # Monitor and logging (optional)
+  radar-monitor:
+    image: prom/prometheus:latest
+    container_name: radar-monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - radar-network
+    profiles:
+      - monitoring
+
+volumes:
+  radar-build:
+    driver: local
+  radar-logs:
+    driver: local
+  radar-data:
+    driver: local
+  prometheus-data:
+    driver: local
+
+networks:
+  radar-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

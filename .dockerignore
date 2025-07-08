@@ -1,0 +1,88 @@
+# Docker ignore file for Radar Tracking System
+# ============================================
+
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.exe
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Version control
+.git/
+.gitignore
+
+# Documentation
+docs/html/
+docs/latex/
+*.pdf
+
+# Logs and temporary files
+logs/
+*.log
+tmp/
+temp/
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Test results
+Testing/
+CTestTestfile.cmake
+
+# Coverage reports
+coverage/
+*.gcno
+*.gcda
+*.lcov
+
+# Profiling data
+*.prof
+gmon.out
+
+# Package files
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+
+# Backup files
+*.bak
+*.backup
+
+# Large data files (add specific patterns as needed)
+*.bin
+*.dat
+scenarios/large_*
+
+# Local configuration overrides
+*local.yaml
+*local.yml
+.env.local
+
+# Node modules (if any)
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Doxygen output
+Doxyfile
+html/
+latex/
