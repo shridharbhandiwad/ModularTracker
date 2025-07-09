@@ -1,0 +1,461 @@
+version: '3.8'
+
+# Multi-platform Docker Compose for Radar Tracking System
+# Supports: linux/amd64, linux/arm64, linux/arm/v7, windows/amd64
+
+x-common-variables: &common-variables
+  CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE:-Release}
+  BUILD_TESTING: ${BUILD_TESTING:-ON}
+  BUILD_SIMULATION: ${BUILD_SIMULATION:-ON}
+  BUILD_BENCHMARKS: ${BUILD_BENCHMARKS:-ON}
+  BUILD_PLUGINS: ${BUILD_PLUGINS:-ON}
+  TARGET_PLATFORM: ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+
+x-common-volumes: &common-volumes
+  - radar-logs:/app/logs
+  - radar-data:/app/data
+  - ./config:/app/config:ro
+  - ./scenarios:/app/scenarios:ro
+
+x-common-networks: &common-networks
+  - radar-network
+
+services:
+  # ===========================================
+  # DEVELOPMENT ENVIRONMENTS
+  # ===========================================
+  
+  # AMD64 Development
+  radar-dev-amd64:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: development
+      platforms:
+        - linux/amd64
+      args:
+        TARGETPLATFORM: linux/amd64
+    platform: linux/amd64
+    container_name: radar-tracking-dev-amd64
+    hostname: radar-dev-amd64
+    volumes:
+      - .:/workspace
+      - radar-build-amd64:/workspace/build
+      - radar-logs:/workspace/logs
+    ports:
+      - "8080:8080/udp"
+      - "8081:8081/tcp"
+    environment:
+      <<: *common-variables
+      CMAKE_BUILD_TYPE: Debug
+      CMAKE_CXX_FLAGS: "-march=native -mtune=native -O3"
+    working_dir: /workspace
+    command: /bin/bash
+    tty: true
+    stdin_open: true
+    networks: *common-networks
+    profiles:
+      - dev
+      - amd64
+
+  # ARM64 Development (Apple Silicon, AWS Graviton)
+  radar-dev-arm64:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: development
+      platforms:
+        - linux/arm64
+      args:
+        TARGETPLATFORM: linux/arm64
+    platform: linux/arm64
+    container_name: radar-tracking-dev-arm64
+    hostname: radar-dev-arm64
+    volumes:
+      - .:/workspace
+      - radar-build-arm64:/workspace/build
+      - radar-logs:/workspace/logs
+    ports:
+      - "8082:8080/udp"
+      - "8083:8081/tcp"
+    environment:
+      <<: *common-variables
+      CMAKE_BUILD_TYPE: Debug
+      CMAKE_CXX_FLAGS: "-march=armv8-a -mtune=cortex-a72"
+    working_dir: /workspace
+    command: /bin/bash
+    tty: true
+    stdin_open: true
+    networks: *common-networks
+    profiles:
+      - dev
+      - arm64
+
+  # ARM v7 Development (Raspberry Pi)
+  radar-dev-armv7:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: development
+      platforms:
+        - linux/arm/v7
+      args:
+        TARGETPLATFORM: linux/arm/v7
+    platform: linux/arm/v7
+    container_name: radar-tracking-dev-armv7
+    hostname: radar-dev-armv7
+    volumes:
+      - .:/workspace
+      - radar-build-armv7:/workspace/build
+      - radar-logs:/workspace/logs
+    ports:
+      - "8084:8080/udp"
+      - "8085:8081/tcp"
+    environment:
+      <<: *common-variables
+      CMAKE_BUILD_TYPE: Debug
+      CMAKE_CXX_FLAGS: "-march=armv7-a -mtune=cortex-a7"
+    working_dir: /workspace
+    command: /bin/bash
+    tty: true
+    stdin_open: true
+    networks: *common-networks
+    profiles:
+      - dev
+      - armv7
+
+  # ===========================================
+  # PRODUCTION ENVIRONMENTS
+  # ===========================================
+  
+  # AMD64 Production (High Performance)
+  radar-prod-amd64:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: production
+      platforms:
+        - linux/amd64
+      args:
+        TARGETPLATFORM: linux/amd64
+    platform: linux/amd64
+    container_name: radar-tracking-prod-amd64
+    hostname: radar-prod-amd64
+    volumes: *common-volumes
+    ports:
+      - "8080:8080/udp"
+      - "8081:8081/tcp"
+    environment:
+      <<: *common-variables
+      CMAKE_CXX_FLAGS: "-march=native -mtune=native -O3 -DNDEBUG"
+    restart: unless-stopped
+    networks: *common-networks
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "radar_tracking_system"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    profiles:
+      - prod
+      - amd64
+
+  # ARM64 Production (Cloud/Edge)
+  radar-prod-arm64:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: production
+      platforms:
+        - linux/arm64
+      args:
+        TARGETPLATFORM: linux/arm64
+    platform: linux/arm64
+    container_name: radar-tracking-prod-arm64
+    hostname: radar-prod-arm64
+    volumes: *common-volumes
+    ports:
+      - "8086:8080/udp"
+      - "8087:8081/tcp"
+    environment:
+      <<: *common-variables
+      CMAKE_CXX_FLAGS: "-march=armv8-a -mtune=cortex-a72 -O3 -DNDEBUG"
+    restart: unless-stopped
+    networks: *common-networks
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "radar_tracking_system"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    profiles:
+      - prod
+      - arm64
+
+  # ARM v7 Production (Edge/IoT)
+  radar-prod-armv7:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: production
+      platforms:
+        - linux/arm/v7
+      args:
+        TARGETPLATFORM: linux/arm/v7
+    platform: linux/arm/v7
+    container_name: radar-tracking-prod-armv7
+    hostname: radar-prod-armv7
+    volumes: *common-volumes
+    ports:
+      - "8088:8080/udp"
+      - "8089:8081/tcp"
+    environment:
+      <<: *common-variables
+      CMAKE_CXX_FLAGS: "-march=armv7-a -mtune=cortex-a7 -O2"
+      BUILD_BENCHMARKS: "OFF"  # Disable benchmarks on low-power devices
+    restart: unless-stopped
+    networks: *common-networks
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "radar_tracking_system"]
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    profiles:
+      - prod
+      - armv7
+      - iot
+
+  # ===========================================
+  # SIMULATORS (Multi-platform)
+  # ===========================================
+  
+  # High-performance simulator (AMD64)
+  radar-simulator-amd64:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: production
+      platforms:
+        - linux/amd64
+    platform: linux/amd64
+    container_name: radar-simulator-amd64
+    hostname: radar-sim-amd64
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+      - radar-logs:/app/logs
+    ports:
+      - "8090:8080/udp"
+    environment:
+      <<: *common-variables
+      SIMULATION_MODE: "high_fidelity"
+      SIMULATION_TARGETS: "100"
+    command: ["./build/radar_simulator", "--config", "scenarios/multi_target.yaml", "--mode", "continuous"]
+    depends_on:
+      - radar-prod-amd64
+    networks: *common-networks
+    profiles:
+      - sim
+      - amd64
+
+  # Edge simulator (ARM64)
+  radar-simulator-arm64:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: production
+      platforms:
+        - linux/arm64
+    platform: linux/arm64
+    container_name: radar-simulator-arm64
+    hostname: radar-sim-arm64
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+      - radar-logs:/app/logs
+    ports:
+      - "8091:8080/udp"
+    environment:
+      <<: *common-variables
+      SIMULATION_MODE: "medium_fidelity"
+      SIMULATION_TARGETS: "50"
+    command: ["./build/radar_simulator", "--config", "scenarios/medium_scenario.yaml", "--mode", "burst"]
+    depends_on:
+      - radar-prod-arm64
+    networks: *common-networks
+    profiles:
+      - sim
+      - arm64
+
+  # IoT simulator (ARM v7)
+  radar-simulator-armv7:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: production
+      platforms:
+        - linux/arm/v7
+    platform: linux/arm/v7
+    container_name: radar-simulator-armv7
+    hostname: radar-sim-armv7
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+      - radar-logs:/app/logs
+    ports:
+      - "8092:8080/udp"
+    environment:
+      <<: *common-variables
+      SIMULATION_MODE: "low_fidelity"
+      SIMULATION_TARGETS: "10"
+    command: ["./build/radar_simulator", "--config", "scenarios/simple_scenario.yaml", "--mode", "periodic"]
+    depends_on:
+      - radar-prod-armv7
+    networks: *common-networks
+    profiles:
+      - sim
+      - armv7
+      - iot
+
+  # ===========================================
+  # MONITORING & UTILITIES
+  # ===========================================
+  
+  # Cross-platform monitoring
+  radar-monitor:
+    image: prom/prometheus:latest
+    platform: ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+    container_name: radar-monitor
+    hostname: radar-monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks: *common-networks
+    profiles:
+      - monitoring
+
+  # Grafana for visualization
+  radar-grafana:
+    image: grafana/grafana:latest
+    platform: ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+    container_name: radar-grafana
+    hostname: radar-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks: *common-networks
+    profiles:
+      - monitoring
+
+  # Log aggregation
+  radar-loki:
+    image: grafana/loki:latest
+    platform: ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+    container_name: radar-loki
+    hostname: radar-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
+    networks: *common-networks
+    profiles:
+      - monitoring
+
+  # ===========================================
+  # LOAD TESTING
+  # ===========================================
+  
+  # Load tester (can run on any platform)
+  radar-loadtest:
+    build:
+      context: .
+      dockerfile: Dockerfile.multiplatform
+      target: development
+    platform: ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+    container_name: radar-loadtest
+    hostname: radar-loadtest
+    volumes:
+      - ./tools/loadtest:/workspace/loadtest
+      - radar-logs:/workspace/logs
+    environment:
+      - TEST_TARGET_HOST=radar-prod-amd64
+      - TEST_TARGET_PORT=8080
+      - TEST_DURATION=300
+      - TEST_CONCURRENT_CONNECTIONS=10
+    command: ["./loadtest/run_loadtest.sh"]
+    depends_on:
+      - radar-prod-amd64
+    networks: *common-networks
+    profiles:
+      - loadtest
+
+volumes:
+  # Platform-specific build volumes
+  radar-build-amd64:
+    driver: local
+  radar-build-arm64:
+    driver: local
+  radar-build-armv7:
+    driver: local
+  
+  # Shared data volumes
+  radar-logs:
+    driver: local
+  radar-data:
+    driver: local
+  
+  # Monitoring volumes
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  loki-data:
+    driver: local
+
+networks:
+  radar-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: radar-br0
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"

@@ -1,0 +1,497 @@
+version: '3.8'
+
+# Docker Swarm Deployment for Radar Tracking System
+# ==================================================
+# Production-ready multi-platform deployment with high availability
+
+services:
+  # ===========================================
+  # PRODUCTION RADAR SYSTEMS
+  # ===========================================
+  
+  # AMD64 High-Performance Nodes
+  radar-prod-amd64:
+    image: radar-tracking-system:production-amd64
+    hostname: "radar-{{.Node.Hostname}}-amd64"
+    environment:
+      - CMAKE_BUILD_TYPE=Release
+      - BUILD_SIMULATION=ON
+      - BUILD_BENCHMARKS=OFF
+      - CMAKE_CXX_FLAGS=-march=native -mtune=native -O3 -DNDEBUG
+      - NODE_TYPE=compute
+    volumes:
+      - radar-logs:/app/logs
+      - radar-data:/app/data
+      - /etc/radar/config:/app/config:ro
+      - /var/radar/scenarios:/app/scenarios:ro
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: udp
+        mode: host
+      - target: 8081
+        published: 8081
+        protocol: tcp
+        mode: host
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 3
+      placement:
+        constraints:
+          - node.platform.arch == x86_64
+          - node.labels.radar-role == compute
+        preferences:
+          - spread: node.labels.zone
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0.3
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: pause
+        monitor: 60s
+        max_failure_ratio: 0.3
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "radar_tracking_system"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ARM64 Edge Nodes
+  radar-prod-arm64:
+    image: radar-tracking-system:production-arm64
+    hostname: "radar-{{.Node.Hostname}}-arm64"
+    environment:
+      - CMAKE_BUILD_TYPE=Release
+      - BUILD_SIMULATION=ON
+      - BUILD_BENCHMARKS=OFF
+      - CMAKE_CXX_FLAGS=-march=armv8-a -mtune=cortex-a72 -O3 -DNDEBUG
+      - NODE_TYPE=edge
+    volumes:
+      - radar-logs:/app/logs
+      - radar-data:/app/data
+      - /etc/radar/config:/app/config:ro
+      - /var/radar/scenarios:/app/scenarios:ro
+    ports:
+      - target: 8080
+        published: 8082
+        protocol: udp
+        mode: host
+      - target: 8081
+        published: 8083
+        protocol: tcp
+        mode: host
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 2
+      placement:
+        constraints:
+          - node.platform.arch == aarch64
+          - node.labels.radar-role == edge
+        preferences:
+          - spread: node.labels.zone
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 60s
+        failure_action: rollback
+        monitor: 120s
+        max_failure_ratio: 0.5
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "radar_tracking_system"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
+
+  # ARM v7 IoT Nodes
+  radar-prod-armv7:
+    image: radar-tracking-system:production-armv7
+    hostname: "radar-{{.Node.Hostname}}-armv7"
+    environment:
+      - CMAKE_BUILD_TYPE=Release
+      - BUILD_SIMULATION=ON
+      - BUILD_BENCHMARKS=OFF
+      - CMAKE_CXX_FLAGS=-march=armv7-a -mtune=cortex-a7 -O2
+      - NODE_TYPE=iot
+    volumes:
+      - radar-logs:/app/logs
+      - radar-data:/app/data
+      - /etc/radar/config:/app/config:ro
+      - /var/radar/scenarios:/app/scenarios:ro
+    ports:
+      - target: 8080
+        published: 8084
+        protocol: udp
+        mode: host
+      - target: 8081
+        published: 8085
+        protocol: tcp
+        mode: host
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 5
+      placement:
+        constraints:
+          - node.platform.arch == armv7l
+          - node.labels.radar-role == iot
+        preferences:
+          - spread: node.labels.zone
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+      restart_policy:
+        condition: on-failure
+        delay: 15s
+        max_attempts: 5
+        window: 300s
+      update_config:
+        parallelism: 2
+        delay: 120s
+        failure_action: rollback
+        monitor: 180s
+        max_failure_ratio: 0.6
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "radar_tracking_system"]
+      interval: 120s
+      timeout: 30s
+      retries: 5
+      start_period: 240s
+
+  # ===========================================
+  # LOAD BALANCER
+  # ===========================================
+  
+  radar-loadbalancer:
+    image: haproxy:2.8-alpine
+    hostname: "radar-lb-{{.Node.Hostname}}"
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: ingress
+      - target: 8080
+        published: 8080
+        protocol: udp
+        mode: ingress
+      - target: 9999
+        published: 9999
+        protocol: tcp
+        mode: ingress
+    configs:
+      - source: haproxy-config
+        target: /usr/local/etc/haproxy/haproxy.cfg
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 2
+      placement:
+        constraints:
+          - node.labels.radar-role == loadbalancer
+        preferences:
+          - spread: node.labels.zone
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+
+  # ===========================================
+  # MONITORING STACK
+  # ===========================================
+  
+  # Prometheus for metrics collection
+  radar-prometheus:
+    image: prom/prometheus:latest
+    hostname: "prometheus-{{.Node.Hostname}}"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+    ports:
+      - target: 9090
+        published: 9090
+        protocol: tcp
+        mode: ingress
+    configs:
+      - source: prometheus-config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus-data:/prometheus
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.radar-role == monitoring
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+      restart_policy:
+        condition: on-failure
+
+  # Grafana for visualization
+  radar-grafana:
+    image: grafana/grafana:latest
+    hostname: "grafana-{{.Node.Hostname}}"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana-admin-password
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    ports:
+      - target: 3000
+        published: 3000
+        protocol: tcp
+        mode: ingress
+    secrets:
+      - grafana-admin-password
+    configs:
+      - source: grafana-datasources
+        target: /etc/grafana/provisioning/datasources/datasources.yml
+      - source: grafana-dashboards-config
+        target: /etc/grafana/provisioning/dashboards/dashboards.yml
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.radar-role == monitoring
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # Loki for log aggregation
+  radar-loki:
+    image: grafana/loki:latest
+    hostname: "loki-{{.Node.Hostname}}"
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - target: 3100
+        published: 3100
+        protocol: tcp
+        mode: ingress
+    configs:
+      - source: loki-config
+        target: /etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/tmp/loki
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.radar-role == monitoring
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # Promtail for log shipping
+  radar-promtail:
+    image: grafana/promtail:latest
+    hostname: "promtail-{{.Node.Hostname}}"
+    command: -config.file=/etc/promtail/config.yml
+    configs:
+      - source: promtail-config
+        target: /etc/promtail/config.yml
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - radar-logs:/app/logs:ro
+    networks:
+      - radar-overlay
+    deploy:
+      mode: global
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ===========================================
+  # DATA MANAGEMENT
+  # ===========================================
+  
+  # Redis for caching and session management
+  radar-redis:
+    image: redis:7-alpine
+    hostname: "redis-{{.Node.Hostname}}"
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    ports:
+      - target: 6379
+        published: 6379
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - redis-data:/data
+    networks:
+      - radar-overlay
+    deploy:
+      mode: replicated
+      replicas: 3
+      placement:
+        constraints:
+          - node.labels.radar-role == data
+        preferences:
+          - spread: node.labels.zone
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+# ===========================================
+# NETWORKS
+# ===========================================
+
+networks:
+  radar-overlay:
+    driver: overlay
+    driver_opts:
+      encrypted: "true"
+    attachable: true
+    ipam:
+      config:
+        - subnet: 10.0.0.0/16
+
+# ===========================================
+# VOLUMES
+# ===========================================
+
+volumes:
+  radar-logs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER:-nfs.local},rw
+      device: ":/var/nfs/radar/logs"
+  
+  radar-data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER:-nfs.local},rw
+      device: ":/var/nfs/radar/data"
+  
+  prometheus-data:
+    driver: local
+  
+  grafana-data:
+    driver: local
+  
+  loki-data:
+    driver: local
+  
+  redis-data:
+    driver: local
+
+# ===========================================
+# SECRETS
+# ===========================================
+
+secrets:
+  grafana-admin-password:
+    external: true
+
+# ===========================================
+# CONFIGS
+# ===========================================
+
+configs:
+  haproxy-config:
+    external: true
+  
+  prometheus-config:
+    external: true
+  
+  grafana-datasources:
+    external: true
+  
+  grafana-dashboards-config:
+    external: true
+  
+  loki-config:
+    external: true
+  
+  promtail-config:
+    external: true

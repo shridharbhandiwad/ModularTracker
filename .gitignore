@@ -1,0 +1,18 @@
+# Multi-platform build artifacts
+*.multiplatform
+build-*
+*-amd64
+*-arm64
+*-armv7
+
+# Docker multi-platform artifacts
+.docker/
+docker-compose.override.yml
+docker-compose.*.override.yml
+
+# Platform-specific logs
+logs-*/
+data-*/
+
+# Container volumes
+volumes/
